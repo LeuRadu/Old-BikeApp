@@ -1,0 +1,20 @@
+<?xml version="1.0" standalone="yes"?>
+<gpx version="1.0">
+    <trk>
+        <trkseg>
+            <trkpt lat="46.784120" lon="23.587555">
+                <time>2016-03-26T00:00:00Z</time>
+            </trkpt>
+            <trkpt lat="46.783811" lon="23.587555">
+                <time>2016-03-26T00:00:01Z</time>
+            </trkpt>
+            <trkpt lat="46.783466" lon="23.587566">
+                <time>2016-03-26T00:00:02Z</time>
+            </trkpt>
+            <trkpt lat="46.783135" lon="23.587555">
+                <time>2016-03-26T00:00:03Z</time>
+            </trkpt>
+        </trkseg>
+    </trk>
+</gpx>
+
