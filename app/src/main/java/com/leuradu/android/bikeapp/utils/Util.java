@@ -1,6 +1,7 @@
 package com.leuradu.android.bikeapp.utils;
 
 import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.Environment;

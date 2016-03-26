@@ -8,7 +8,7 @@
     tools:context=".MainActivity">
 
     <fragment class="com.skobbler.ngx.map.SKMapFragment"
-              android:id="@+id/mapfragment"
+              android:id="@+id/map_fragment"
               android:layout_width="match_parent"
               android:layout_height="match_parent" />
 

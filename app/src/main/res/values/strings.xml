@@ -14,4 +14,5 @@
     <string name="info_registered">User registered. ObjectId: %s</string>
     <string name="info_logging">Logged in. ObjectId: %s</string>
     <string name="menu_show_track">Show track</string>
+    <string name="credits">Developed by Leu Radu using Skobbler SDK and Backendless</string>
 </resources>
