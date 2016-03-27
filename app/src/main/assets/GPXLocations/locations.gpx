@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.0" creator="GPS Visualizer Sandbox http://www.gpsvisualizer.com/draw/" xmlns="http://www.topografix.com/GPX/1/0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+	<wpt lat="46.7841565" lon="23.5876036">
+		<name>Gara</name>
+	</wpt>
+	<wpt lat="46.7833080" lon="23.5896742">
+		<name>Acasa</name>
+	</wpt>
+	<wpt lat="46.7805455" lon="23.5874373">
+		<name>Farmacie</name>
+	</wpt>
+</gpx>
