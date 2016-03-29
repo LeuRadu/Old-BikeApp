@@ -3,6 +3,21 @@
       xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/menu_item_select_start"
+        android:title="@string/menu_select_start"
+        app:showAsAction="collapseActionView"/>
+
+    <item
+        android:id="@+id/menu_item_select_end"
+        android:title="@string/menu_select_end"
+        app:showAsAction="collapseActionView"/>
+
+    <item
+        android:id="@+id/menu_item_route"
+        android:title="@string/menu_route"
+        app:showAsAction="collapseActionView"/>
+
+    <item
         android:id="@+id/menu_item_show_track"
         android:title="@string/menu_show_track"
         app:showAsAction="ifRoom"/>

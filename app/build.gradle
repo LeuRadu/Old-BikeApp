@@ -26,4 +26,5 @@ dependencies {
     compile 'com.backendless:android:1.0'
     compile files('libs/SKMaps.jar')
     compile 'com.google.guava:guava:19.0'
+    compile 'com.android.support:recyclerview-v7:23.1.1'
 }

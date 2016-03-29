@@ -13,6 +13,9 @@
     <string name="login_wait">Logging in...</string>
     <string name="info_registered">User registered. ObjectId: %s</string>
     <string name="info_logging">Logged in. ObjectId: %s</string>
-    <string name="menu_show_track">Show track</string>
-    <string name="credits">Developed by Leu Radu using Skobbler SDK and Backendless</string>
+    <string name="menu_show_track">Tracks</string>
+    <string name="menu_select_start">Start</string>
+    <string name="menu_select_end">End</string>
+    <string name="menu_route">Route</string>
+    <string name="credits">Developed by Leu Radu using Scout and Backendless</string>
 </resources>
