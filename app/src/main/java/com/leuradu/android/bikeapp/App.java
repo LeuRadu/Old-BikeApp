@@ -2,6 +2,8 @@ package com.leuradu.android.bikeapp;
 
 import android.app.Application;
 
+import com.backendless.Backendless;
+import com.leuradu.android.bikeapp.utils.BackendSettings;
 import com.leuradu.android.bikeapp.utils.Util;
 
 import java.io.File;
@@ -18,6 +20,8 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         mResourcesDirPath = Util.determineStoragePath(getApplicationContext()) + "/SKMaps/";
+        Backendless.initApp(this, BackendSettings.APPLICATION_ID, BackendSettings.ANDROID_SECRET_KEY,
+                BackendSettings.VERSION);
     }
 
     public static String getResourcesDirPath() {

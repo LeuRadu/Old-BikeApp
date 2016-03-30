@@ -10,7 +10,7 @@
         android:textSize="@dimen/large_text"
         android:text="@string/register_title"
         android:layout_gravity="center_horizontal"
-        android:layout_margin="@dimen/small_padding"/>
+        android:layout_margin="@dimen/small"/>
 
     <GridLayout
         android:layout_width="wrap_content"
@@ -18,7 +18,7 @@
         android:columnCount="2"
         android:rowCount="4"
         android:layout_gravity="left"
-        android:paddingLeft="@dimen/small_padding">
+        android:paddingLeft="@dimen/small">
 
         <TextView
             android:layout_width="wrap_content"
@@ -83,7 +83,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="@dimen/large_padding"
+        android:layout_marginTop="@dimen/large"
         android:text="@string/register"
         android:textSize="@dimen/large_text"/>
 

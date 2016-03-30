@@ -46,7 +46,14 @@ public class LoginFragment extends Fragment {
             }
         });
 
+        setDataForTesting();
+
         return v;
+    }
+
+    private void setDataForTesting() {
+        mTextEmail.setText("radu@yahoo.com");
+        mTextPassword.setText("pass");
     }
 
     public void loginUser( String email, String password, AsyncCallback<BackendlessUser> loginCallback )

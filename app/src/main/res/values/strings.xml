@@ -11,6 +11,7 @@
     <string name="loading">Loading...</string>
     <string name="loading_register">Sending registration request...</string>
     <string name="login_wait">Logging in...</string>
+    <string name="logout_wait">Logging out...</string>
     <string name="info_registered">User registered. ObjectId: %s</string>
     <string name="info_logging">Logged in. ObjectId: %s</string>
     <string name="menu_show_track">Tracks</string>
@@ -18,4 +19,9 @@
     <string name="menu_select_end">End</string>
     <string name="menu_route">Route</string>
     <string name="credits">Developed by Leu Radu using Scout and Backendless</string>
+
+    <string name="shortest">Shortest</string>
+    <string name="fastest">Fastest</string>
+    <string name="quiet">Quiet</string>
+
 </resources>

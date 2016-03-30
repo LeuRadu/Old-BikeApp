@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-                android:layout_width="match_parent"
-                android:layout_height="50dp">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:weightSum="10">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="50dp"
+              android:orientation="horizontal"
+              android:weightSum="10">
 
         <ImageView
             android:id="@+id/menu_item_icon"
@@ -23,6 +20,5 @@
             android:text="Some list item"
             android:textSize="25sp"
             android:gravity="center_vertical"/>
-    </LinearLayout>
 
-</RelativeLayout>
+</LinearLayout>

@@ -2,10 +2,12 @@ package com.leuradu.android.bikeapp.utils;
 
 import android.content.Context;
 import android.media.Image;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -22,6 +24,8 @@ import java.util.List;
  */
 public class MenuListAdapter extends ArrayAdapter<CustomMenuItem> {
 
+    private static final String TAG = "MenuListAdapter";
+
     private ArrayList<CustomMenuItem> mItems;
     private LayoutInflater mInflater;
 
@@ -36,22 +40,30 @@ public class MenuListAdapter extends ArrayAdapter<CustomMenuItem> {
 
         CustomMenuItem item = mItems.get(position);
         MenuItemHolder holder;
-        ImageView icon = null;
+        View leftView = null;
         TextView label;
         int type = item.getType();
 
         if (convertView == null) {
             if (type == CustomMenuItem.TYPE_HEADER) {
                 convertView = mInflater.inflate(R.layout.menu_list_header, parent, false);
-                label = (TextView) convertView.findViewById(R.id.menu_item_header);
-            } else {
+                label = (TextView) convertView.findViewById(R.id.menu_item_label);
+            } else if (type == CustomMenuItem.TYPE_ITEM){
                 convertView = mInflater.inflate(R.layout.menu_list_item, parent, false);
-                icon = (ImageView) convertView.findViewById(R.id.menu_item_icon);
+                leftView = convertView.findViewById(R.id.menu_item_icon);
+                label = (TextView) convertView.findViewById(R.id.menu_item_label);
+            } else if (type == CustomMenuItem.TYPE_CHECKBOX){
+                Log.d(TAG, "type is checkbox!");
+                convertView = mInflater.inflate(R.layout.menu_list_checkbox, parent, false);
+                leftView = convertView.findViewById(R.id.menu_item_checkbox);
+                label = (TextView) convertView.findViewById(R.id.menu_item_label);
+            } else { //if (type == CustomMenuItem.TYPE_INFO) {
+                convertView = mInflater.inflate(R.layout.menu_list_info, parent, false);
                 label = (TextView) convertView.findViewById(R.id.menu_item_label);
             }
 
             holder = new MenuItemHolder();
-            holder.imageView = icon;
+            holder.leftView = leftView;
             holder.labelView = label;
 
             convertView.setTag(holder);
@@ -60,16 +72,18 @@ public class MenuListAdapter extends ArrayAdapter<CustomMenuItem> {
         }
 
         holder.labelView.setText(item.getLabel());
-        if (holder.imageView != null) {
-            holder.imageView.setImageDrawable(item.getIcon());
+        switch (type) {
+            case CustomMenuItem.TYPE_ITEM:
+                ((ImageView)holder.leftView).setImageDrawable(item.getIcon());
+                break;
         }
 
         return convertView;
     }
 
+//    Returns the type of view that getView will return for that position
     @Override
     public int getItemViewType(int position) {
-//        TODO: How is this used by adapter? hmm?
         return this.getItem(position).getType();
     }
 
@@ -79,7 +93,7 @@ public class MenuListAdapter extends ArrayAdapter<CustomMenuItem> {
     }
 
     private static class MenuItemHolder{
-        private ImageView imageView;
+        private View leftView;
         private TextView labelView;
     }
 }

@@ -10,13 +10,21 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.backendless.Backendless;
+import com.backendless.BackendlessUser;
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.R;
 import com.leuradu.android.bikeapp.model.CustomMenuItem;
 import com.leuradu.android.bikeapp.model.Location;
+import com.leuradu.android.bikeapp.utils.BackendUtils;
 import com.leuradu.android.bikeapp.utils.MenuListAdapter;
 import com.skobbler.ngx.SKCoordinate;
 import com.skobbler.ngx.map.SKAnimationSettings;
@@ -53,48 +61,63 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     public static final String TAG = "MapActivity";
 
     public enum MenuAction {
-        HEADER, SHOW_BIKE_LANES, ROUTE, SET_STARTING_POINT, SET_END_POINT
+        NOACTION, SHOW_BIKE_LANES, ROUTE, SET_STARTING_POINT, SET_END_POINT, LOGIN, LOGOUT
     }
 
     public enum PressType {
         NORMAL, SELECT_ROUTE_START, SELECT_ROUTE_DESTINATION
     }
 
+    public enum MapState {
+        DEFAULT, ROUTING
+    }
+
+    public enum RouteType {
+        SHORTEST, FASTEST, QUIET
+    }
+
 //    States
-    private PressType stateLongPress;
+    private PressType typeLongPress;
+    private MapState mMapState;
+    private RouteType mRouteType;
+    private boolean mBikeLanesShown;
+    private boolean mUserLoggedIn;
 
     //  --Preset variables
-    //    Set this through some config?
+    //    Set these through some config?
     private static int minZoomLevel = 10;
     private static int nextUniqueId = 20;
 
-
-//  --Used to compute route
+//  --Used for routing
     private SKCoordinate mStartPoint;
     private SKCoordinate mEndPoint;
     private SKAnnotation mStartPointAnnotation;
     private SKAnnotation mEndPointAnnotation;
-//    TODO: don't use these anymore
-    private static final int mStartAnnotationId = 0;
-    private static final int mEndAnnotationId = 1;
+    private String mRoutingDistance;
+    private String mRoutingTime;
 
 //  --SKMap-specific objects
     private SKMapViewHolder mapViewHolder;
     private SKMapSurfaceView mapView;
 
 //  --Views
+    private LinearLayout mRoutingLayout;
     private DrawerLayout mDrawerLayout;
-    private ListView mListViewLeftDrawer;
-    private ListView mListViewRightDrawer;
+    private ListView mListViewLeft;
+    private ListView mListViewRight;
+
+    private ImageButton mButtonCloseRouting;
+    private Button mButtonRouteShortest;
+    private Button mButtonRouteFastest;
+    private Button mButtonRouteQuiet;
+    private TextView mTextRoutingDistance;
+    private TextView mTextRoutingTime;
 
 //  --Collections
-//    Holds info for annotations
+//    Holds info for annotations - use this later for favourites/comunity POIs
     private HashMap<Integer,Location> mLocations;
-    private ArrayList<CustomMenuItem> mLeftDrawerList;
-    private ArrayList<CustomMenuItem> mRightDrawerList;
-//    TODO: find a more elegant solution to associate an action to a menu item
-    private ArrayList<MenuAction> mLeftMenuActionList;
-    private ArrayList<MenuAction> mRightMenuActionList;
+    private ArrayList<CustomMenuItem> mLeftMenu;
+    private ArrayList<CustomMenuItem> mRightMenu;
 
 //  --Others
     private SKAnnotation mCurrentAnnotation;
@@ -118,60 +141,153 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mapFragment.setMapSurfaceListener(this);
     }
 
-    private void initViews() {
-        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
-        mListViewLeftDrawer = (ListView) findViewById(R.id.left_drawer);
-        mListViewRightDrawer = (ListView) findViewById(R.id.right_drawer);
-    }
-
-    private void initDrawers() {
-        mLeftDrawerList = new ArrayList<>();
-        mLeftMenuActionList = new ArrayList<>();
-        mRightDrawerList = new ArrayList<>();
-        mRightMenuActionList = new ArrayList<>();
-//        TODO: atempt to use multiple right drawers interchangeably
-
-        int header = CustomMenuItem.TYPE_HEADER;
-        int item = CustomMenuItem.TYPE_ITEM;
-        Drawable courage = getResources().getDrawable(R.drawable.courage);
-
-        mLeftDrawerList.add(new CustomMenuItem(header, "ACTIONS"));
-        mLeftDrawerList.add(new CustomMenuItem(item, "Show bike lanes", courage));
-        mLeftDrawerList.add(new CustomMenuItem(item, "Route", courage));
-//        mLeftDrawerList.add(new CustomMenuItem(item, "...", courage));
-        mLeftMenuActionList.add(MenuAction.HEADER);
-        mLeftMenuActionList.add(MenuAction.SHOW_BIKE_LANES);
-        mLeftMenuActionList.add(MenuAction.ROUTE);
-
-        mRightDrawerList.add(new CustomMenuItem(header, "ROUTING"));
-        mRightDrawerList.add(new CustomMenuItem(item, "Set as starting point"));
-        mRightDrawerList.add(new CustomMenuItem(item, "Set as destination"));
-
-        mRightMenuActionList.add(MenuAction.HEADER);
-        mRightMenuActionList.add(MenuAction.SET_STARTING_POINT);
-        mRightMenuActionList.add(MenuAction.SET_END_POINT);
-
-//        We pass 0 because in adapter class we inflate 2 different layouts depending
-//        on CustomMenuItem type
-        mListViewLeftDrawer.setAdapter(new MenuListAdapter(this, 0, mLeftDrawerList));
-        mListViewLeftDrawer.setOnItemClickListener(new LeftMenuItemClickListener());
-        mListViewRightDrawer.setAdapter(new MenuListAdapter(this, 0, mRightDrawerList));
-//        TODO: rethink this - do you need 2 listeners?
-        mListViewRightDrawer.setOnItemClickListener(new RightMenuItemClickListener());
-    }
-
-    //    Initialize some member variables
-    private void initVariables() {
-        mLocations = new HashMap<>();
-        mStartPoint = null;
-        mEndPoint = null;
-        stateLongPress = PressType.NORMAL;
-    }
-
     @Override
     protected void onPause() {
         super.onPause();
         mapViewHolder.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        BackendlessUser user = Backendless.UserService.CurrentUser();
+        Log.d("onResume", "" + ((user == null) ? "null" : "User: " + user.getEmail()));
+//          TODO: find a better way to update left menu after login
+        if (user != null) {
+            mUserLoggedIn = true;
+            initDrawers();
+        }
+
+    }
+
+    private void initViews() {
+        mRoutingLayout = (LinearLayout) findViewById(R.id.layout_routing);
+        mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
+        mListViewLeft = (ListView) findViewById(R.id.left_drawer);
+        mListViewRight = (ListView) findViewById(R.id.right_drawer);
+
+        mButtonCloseRouting = (ImageButton) findViewById(R.id.button_close_routing);
+        mButtonRouteFastest = (Button) findViewById(R.id.button_route_fastest);
+        mButtonRouteShortest = (Button) findViewById(R.id.button_route_shortest);
+        mButtonRouteQuiet = (Button) findViewById(R.id.button_route_quiet);
+        mButtonRouteShortest.setTextColor(getResources().getColor(R.color.red));
+
+        mTextRoutingDistance = (TextView) findViewById(R.id.text_routing_distance);
+        mTextRoutingTime = (TextView) findViewById(R.id.text_routing_time);
+
+        mButtonCloseRouting.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                closeRouting();
+            }
+        });
+
+        mButtonRouteFastest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mRouteType != RouteType.FASTEST) {
+                    changeRouteType(RouteType.FASTEST);
+                    calculateRoute();
+                }
+            }
+        });
+
+        mButtonRouteShortest.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mRouteType != RouteType.SHORTEST) {
+                    changeRouteType(RouteType.SHORTEST);
+                    calculateRoute();
+                }
+            }
+        });
+
+        mButtonRouteQuiet.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mRouteType != RouteType.QUIET) {
+                    changeRouteType(RouteType.QUIET);
+                    calculateRoute();
+                }
+            }
+        });
+    }
+
+    private void initDrawers() {
+        mLeftMenu = new ArrayList<>();
+        mRightMenu = new ArrayList<>();
+//        TODO: atempt to use multiple right drawers interchangeably
+        int header = CustomMenuItem.TYPE_HEADER;
+        int item = CustomMenuItem.TYPE_ITEM;
+        int checkbox = CustomMenuItem.TYPE_CHECKBOX;
+        int info = CustomMenuItem.TYPE_INFO;
+        Drawable courage = getResources().getDrawable(R.drawable.courage);
+
+        mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "YOUR ACCOUNT"));
+//          TODO: implement this change in onResume or as activity result?
+        if (mUserLoggedIn) {
+            mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, info,
+                    "Welcome, " + Backendless.UserService.CurrentUser().getProperty("name")));
+            mLeftMenu.add(new CustomMenuItem(MenuAction.LOGOUT, item, "Log out"));
+        } else {
+            mLeftMenu.add(new CustomMenuItem(MenuAction.LOGIN, item, "Log in"));
+        }
+        mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "ACTIONS"));
+        mLeftMenu.add(new CustomMenuItem(MenuAction.SHOW_BIKE_LANES, checkbox, "Show bike lanes"));
+        mLeftMenu.add(new CustomMenuItem(MenuAction.ROUTE, item, "Route", courage));
+
+        mRightMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "ROUTING"));
+        mRightMenu.add(new CustomMenuItem(MenuAction.SET_STARTING_POINT, item, "Set as starting point"));
+        mRightMenu.add(new CustomMenuItem(MenuAction.SET_END_POINT, item, "Set as destination"));
+
+//        We pass 0 because it's irrelevant - in adapter class we inflate 2 different layouts depending
+//        on CustomMenuItem type
+        //        TODO: rethink this - do you need 2 listeners?
+        mListViewLeft.setAdapter(new MenuListAdapter(this, 0, mLeftMenu));
+        mListViewLeft.setOnItemClickListener(new LeftMenuItemClickListener());
+        mListViewRight.setAdapter(new MenuListAdapter(this, 0, mRightMenu));
+        mListViewRight.setOnItemClickListener(new RightMenuItemClickListener());
+    }
+
+    private void initVariables() {
+        typeLongPress = PressType.NORMAL;
+        mMapState = MapState.DEFAULT;
+        mRouteType = RouteType.SHORTEST;
+        mBikeLanesShown = false;
+        mUserLoggedIn = false;
+        mLocations = new HashMap<>();
+        mStartPoint = null;
+        mEndPoint = null;
+        mStartPointAnnotation = null;
+        mEndPointAnnotation = null;
+        mCurrentAnnotation = null;
+    }
+
+//    Sets mRouteType to new type and changes button text color to reflect change
+    private void changeRouteType(RouteType type) {
+        switch (mRouteType) {
+            case SHORTEST:
+                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.black));
+                break;
+            case FASTEST:
+                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.black));
+                break;
+            case QUIET:
+                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.black));
+                break;
+        }
+        switch (type) {
+            case SHORTEST:
+                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.red));
+                break;
+            case FASTEST:
+                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.red));
+                break;
+            case QUIET:
+                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.red));
+                break;
+        }
+        mRouteType = type;
     }
 
     @Override
@@ -188,9 +304,20 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mapView.setZoom(15);
     }
 
+    //  Closes left & right drawers
+    private void closeDrawers() {
+        if (mDrawerLayout.isDrawerOpen(mListViewLeft)) {
+            mDrawerLayout.closeDrawer(mListViewLeft);
+        }
+        if (mDrawerLayout.isDrawerOpen(mListViewRight)) {
+            mDrawerLayout.closeDrawer(mListViewRight);
+        }
+    }
+
 //    Draws the tracks in a gpx file as polylines
     private void drawGPXTracks() {
 //        TODO: Use a better GPX file for presentation!
+//        TODO: Find a way to draw routes over the tracks!
         SKTracksFile tracksFile = SKTracksFile.loadAtPath(App.getResourcesDirPath() + "GPXTracks/Cluj3.gpx");
         SKTrackElement root =tracksFile.getRootTrackElement();
 
@@ -227,9 +354,10 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     public void onLongPress(SKScreenPoint skScreenPoint) {
         Log.d(TAG, "Long pressed!");
         SKCoordinate point = mapView.pointToCoordinate(skScreenPoint);
-        switch (stateLongPress) {
+        switch (typeLongPress) {
             case NORMAL:
                 addAnnotation(point,SKAnnotation.SK_ANNOTATION_TYPE_MARKER);
+                createPopup(mCurrentAnnotation);
                 break;
             case SELECT_ROUTE_START:
                 break;
@@ -270,7 +398,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         view.setOnRightImageClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mDrawerLayout.openDrawer(mListViewRightDrawer);
+                mDrawerLayout.openDrawer(mListViewRight);
             }
         });
         view.showAtLocation(annotation.getLocation(), true);
@@ -280,67 +408,120 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mapViewHolder.getCalloutView().setVisibility(View.GONE);
     }
 
-    public void calculateRoute() {
+    public void startRouting() {
         if (mStartPoint == null || mEndPoint == null) {
             Toast.makeText(this,"Start and end must be set!",Toast.LENGTH_LONG).show();
             return;
         }
-        Log.d(TAG, "Calculating route!");
-        SKRouteSettings route = new SKRouteSettings();
+        mMapState = MapState.ROUTING;
+        mRoutingLayout.setVisibility(View.VISIBLE);
+        calculateRoute();
+    }
 
+    public void closeRouting() {
+        mMapState = MapState.DEFAULT;
+        SKRouteManager.getInstance().clearCurrentRoute();
+        findViewById(R.id.layout_routing).setVisibility(View.GONE);
+    }
+
+    public void calculateRoute() {
+        SKRouteSettings route = new SKRouteSettings();
         route.setStartCoordinate(mStartPoint);
         route.setDestinationCoordinate(mEndPoint);
-
         route.setNoOfRoutes(1);
-//        TODO: way of setting route mode
-        route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_SHORTEST);
+        switch (mRouteType) {
+            case SHORTEST:
+                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_SHORTEST);
+                break;
+            case FASTEST:
+                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_FASTEST);
+                break;
+            case QUIET:
+                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_QUIETEST);
+                break;
+        }
         route.setRouteExposed(true);
-
         SKRouteManager.getInstance().calculateRoute(route);
+    }
+
+    //    Unimplemented route listener methods
+    @Override
+
+    public void onRouteCalculationCompleted(SKRouteInfo skRouteInfo) {
+//          TODO: rewrite this when computing alternative routes!
+        mRoutingDistance = skRouteInfo.getDistance() + "m";
+        int seconds = skRouteInfo.getEstimatedTime();
+        int minutes = (seconds / 60) % 60;
+        int hours = (seconds / 3600);
+        if (hours != 0) {
+            mRoutingTime = hours + "h " + minutes + "min";
+        } else {
+            mRoutingTime = minutes + "min";
+        }
+        mTextRoutingTime.setText(mRoutingTime);
+        mTextRoutingDistance.setText(mRoutingDistance);
     }
 
     @Override
     public void onAllRoutesCompleted() {
-//      TODO: do something?
+//      TODO: do something - when implementing alternative routes
     }
 
     private class LeftMenuItemClickListener implements ListView.OnItemClickListener {
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            if (mDrawerLayout.isDrawerOpen(mListViewLeftDrawer)) {
-                mDrawerLayout.closeDrawer(mListViewLeftDrawer);
+            MenuAction action = mLeftMenu.get(position).getMenuAction();
+            switch (action) {
+//                TODO: maybe move this to menuAction()? (would need to have checkbox var somewhere)
+                case SHOW_BIKE_LANES:
+                    CheckBox cb = (CheckBox) view.findViewById(R.id.menu_item_checkbox);
+                    cb.setChecked(!cb.isChecked());
+                    break;
             }
-            menuAction(mLeftMenuActionList.get(position));
+            menuAction(action);
         }
-    }
 
+    }
     private class RightMenuItemClickListener implements ListView.OnItemClickListener {
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            if (mDrawerLayout.isDrawerOpen(mListViewRightDrawer)) {
-                mDrawerLayout.closeDrawer(mListViewRightDrawer);
+            if (mDrawerLayout.isDrawerOpen(mListViewRight)) {
+                mDrawerLayout.closeDrawer(mListViewRight);
             }
-            menuAction(mRightMenuActionList.get(position));
+            menuAction(mRightMenu.get(position).getMenuAction());
         }
     }
 
-//    TODO: close drawers accordingly
     private void menuAction(MenuAction action) {
         switch (action) {
-            case HEADER:
+            case NOACTION:
                 break;
             case SHOW_BIKE_LANES:
-//                TODO: use checkbox instead
-                drawGPXTracks();
+                if (!mBikeLanesShown) {
+                    drawGPXTracks();
+                }
+                else {
+                    mapView.clearAllOverlays();
+                }
+                mBikeLanesShown = !mBikeLanesShown;
                 break;
             case ROUTE:
-                calculateRoute();
+                closeDrawers();
+                startRouting();
                 break;
             case SET_STARTING_POINT:
                 setStartPoint();
                 break;
             case SET_END_POINT:
                 setEndPoint();
+                break;
+            case LOGIN:
+                startActivity(LoginActivity.newIntent(this));
+                break;
+            case LOGOUT:
+//                TODO: find a way to update menu
+                closeDrawers();
+                BackendUtils.logout(this);
                 break;
         }
     }
@@ -431,11 +612,11 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
     }
 
+
     @Override
     public void onMapPOISelected(SKMapPOI skMapPOI) {
 
     }
-
 
     @Override
     public void onCustomPOISelected(SKMapCustomPOI skMapCustomPOI) {
@@ -474,13 +655,6 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
     @Override
     public void onScreenshotReady(Bitmap bitmap) {
-
-    }
-
-//    Unimplemented route listener methods
-
-    @Override
-    public void onRouteCalculationCompleted(SKRouteInfo skRouteInfo) {
 
     }
 
