@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Menu;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -20,10 +21,10 @@ import android.widget.Toast;
 
 import com.backendless.Backendless;
 import com.backendless.BackendlessUser;
+import com.backendless.geo.GeoPoint;
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.R;
 import com.leuradu.android.bikeapp.model.CustomMenuItem;
-import com.leuradu.android.bikeapp.model.Location;
 import com.leuradu.android.bikeapp.utils.BackendUtils;
 import com.leuradu.android.bikeapp.utils.MenuListAdapter;
 import com.skobbler.ngx.SKCoordinate;
@@ -50,7 +51,7 @@ import com.skobbler.ngx.tracks.SKTracksFile;
 import com.skobbler.ngx.tracks.SKTracksPoint;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.List;
 
 /**
  * Created by radu on 23.03.2016.
@@ -61,7 +62,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     public static final String TAG = "MapActivity";
 
     public enum MenuAction {
-        NOACTION, SHOW_BIKE_LANES, ROUTE, SET_STARTING_POINT, SET_END_POINT, LOGIN, LOGOUT
+        NOACTION, SHOW_BIKE_LANES, ROUTE, SET_STARTING_POINT, SET_END_POINT, LOGIN, LOGOUT,
+        SHOW_FAVORITES, SHOW_EVENTS, SAVE_TO_FAVORITES, SAVE_TO_EVENTS
     }
 
     public enum PressType {
@@ -81,6 +83,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     private MapState mMapState;
     private RouteType mRouteType;
     private boolean mBikeLanesShown;
+    private boolean mFavoritesShown;
+    private boolean mEventsShown;
     private boolean mUserLoggedIn;
 
     //  --Preset variables
@@ -114,13 +118,16 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     private TextView mTextRoutingTime;
 
 //  --Collections
-//    Holds info for annotations - use this later for favourites/comunity POIs
-    private HashMap<Integer,Location> mLocations;
     private ArrayList<CustomMenuItem> mLeftMenu;
     private ArrayList<CustomMenuItem> mRightMenu;
+    private List<GeoPoint> mFavorites;
 
 //  --Others
     private SKAnnotation mCurrentAnnotation;
+    private int mFirstFavoriteId;
+    private int mLastFavoriteId;
+    private int mFirstEventId;
+    private int mLastEventId;
 
     public static Intent newIntent(Context context) {
         return new Intent(context, MapActivity.class);
@@ -224,22 +231,29 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         Drawable courage = getResources().getDrawable(R.drawable.courage);
 
         mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "YOUR ACCOUNT"));
-//          TODO: implement this change in onResume or as activity result?
+//          TODO: another way to create/update drawer menus (no complete recreation)
         if (mUserLoggedIn) {
             mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, info,
                     "Welcome, " + Backendless.UserService.CurrentUser().getProperty("name")));
+            mLeftMenu.add(new CustomMenuItem(MenuAction.SHOW_FAVORITES, checkbox, "Show favorites"));
             mLeftMenu.add(new CustomMenuItem(MenuAction.LOGOUT, item, "Log out"));
         } else {
             mLeftMenu.add(new CustomMenuItem(MenuAction.LOGIN, item, "Log in"));
         }
-        mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "ACTIONS"));
+        mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "OPTIONS"));
         mLeftMenu.add(new CustomMenuItem(MenuAction.SHOW_BIKE_LANES, checkbox, "Show bike lanes"));
+        mLeftMenu.add(new CustomMenuItem(MenuAction.SHOW_EVENTS, checkbox, "Show events"));
+        mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "ACTIONS"));
         mLeftMenu.add(new CustomMenuItem(MenuAction.ROUTE, item, "Route", courage));
 
         mRightMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "ROUTING"));
         mRightMenu.add(new CustomMenuItem(MenuAction.SET_STARTING_POINT, item, "Set as starting point"));
         mRightMenu.add(new CustomMenuItem(MenuAction.SET_END_POINT, item, "Set as destination"));
-
+        if (mUserLoggedIn) {
+            mRightMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "SAVE LOCATION"));
+            mRightMenu.add(new CustomMenuItem(MenuAction.SAVE_TO_FAVORITES, item, "Save to favorites"));
+            mRightMenu.add(new CustomMenuItem(MenuAction.SAVE_TO_EVENTS, item, "Create new event"));
+        }
 //        We pass 0 because it's irrelevant - in adapter class we inflate 2 different layouts depending
 //        on CustomMenuItem type
         //        TODO: rethink this - do you need 2 listeners?
@@ -254,8 +268,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mMapState = MapState.DEFAULT;
         mRouteType = RouteType.SHORTEST;
         mBikeLanesShown = false;
+        mFavoritesShown = false;
         mUserLoggedIn = false;
-        mLocations = new HashMap<>();
         mStartPoint = null;
         mEndPoint = null;
         mStartPointAnnotation = null;
@@ -313,6 +327,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             mDrawerLayout.closeDrawer(mListViewRight);
         }
     }
+
 
 //    Draws the tracks in a gpx file as polylines
     private void drawGPXTracks() {
@@ -474,6 +489,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             switch (action) {
 //                TODO: maybe move this to menuAction()? (would need to have checkbox var somewhere)
                 case SHOW_BIKE_LANES:
+                case SHOW_FAVORITES:
+                case SHOW_EVENTS:
                     CheckBox cb = (CheckBox) view.findViewById(R.id.menu_item_checkbox);
                     cb.setChecked(!cb.isChecked());
                     break;
@@ -493,6 +510,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     }
 
     private void menuAction(MenuAction action) {
+        SKCoordinate point;
         switch (action) {
             case NOACTION:
                 break;
@@ -510,10 +528,14 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 startRouting();
                 break;
             case SET_STARTING_POINT:
+                closeDrawers();
                 setStartPoint();
                 break;
             case SET_END_POINT:
+                closeDrawers();
                 setEndPoint();
+                if (mStartPoint != null)
+                    startRouting();
                 break;
             case LOGIN:
                 startActivity(LoginActivity.newIntent(this));
@@ -522,9 +544,112 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 //                TODO: find a way to update menu
                 closeDrawers();
                 BackendUtils.logout(this);
+                initDrawers();
                 break;
+            case SHOW_FAVORITES:
+                if (mFavoritesShown) {
+                    removeFavorites();
+                } else {
+                    showFavorites();
+                }
+                mFavoritesShown = !mFavoritesShown;
+                break;
+            case SAVE_TO_FAVORITES:
+                closeDrawers();
+//                TODO: use dialog to add name/descr
+                point = mCurrentAnnotation.getLocation();
+                BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
+                        "Placeholder_name", "Placeholder_descr","Favorites");
+                if (mFavoritesShown) {
+//                    TODO: must sync this, or last item is not added at all
+                    refreshFavorites();
+                    mapView.deleteAnnotation(mCurrentAnnotation.getUniqueID());
+                }
+                break;
+            case SHOW_EVENTS:
+                if (mEventsShown) {
+                    removeEvents();
+                } else {
+                    showEvents();
+                }
+                mEventsShown = !mEventsShown;
+                break;
+            case SAVE_TO_EVENTS:
+                closeDrawers();
+                point = mCurrentAnnotation.getLocation();
+                BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
+                        "Placeholder_name", "Placeholder_descr", "Events");
+                if (mEventsShown) {
+                    refreshEvents();
+                    mapView.deleteAnnotation(mCurrentAnnotation.getUniqueID());
+                }
         }
     }
+
+    private void showEvents() {
+        BackendUtils.fetchData(this, BackendUtils.DataType.EVENTS);
+    }
+
+    private void removeEvents() {
+        for (int i = mFirstEventId; i<= mLastEventId; i++) {
+            mapView.deleteAnnotation(i);
+        }
+    }
+
+    private void showFavorites() {
+        BackendUtils.fetchData(this, BackendUtils.DataType.FAVORITES);
+    }
+
+//    TODO: merge with removeEvents
+    private void removeFavorites() {
+        for (int i = mFirstFavoriteId; i<= mLastFavoriteId; i++) {
+            mapView.deleteAnnotation(i);
+        }
+    }
+
+    private void refreshFavorites() {
+        removeFavorites();
+        showFavorites();
+    }
+
+    private void refreshEvents() {
+        removeEvents();
+        showEvents();
+    }
+
+    public void updateFavorites(List<GeoPoint> points) {
+        Log.d("updateFavorites", "# of points: " + points.size());
+        mFavorites = points;
+        mFirstFavoriteId = nextUniqueId;
+        for (GeoPoint point : points) {
+//            TODO: create a general method for adding annotations
+            SKAnnotation a = new SKAnnotation(nextUniqueId++);
+//            TODO: change to custom view (star?)
+            a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_PURPLE);
+            a.setLocation(new SKCoordinate(point.getLongitude(), point.getLatitude()));
+            a.setMininumZoomLevel(minZoomLevel);
+//            TODO: set offset properly - everywhere with annotations
+            mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+        }
+        mLastFavoriteId = nextUniqueId - 1;
+    }
+
+//    TODO: merge updateFavorites & updateEvents
+    public void updateEvents(List<GeoPoint> points) {
+        Log.d("updateEvents", "# of points: " + points.size());
+        mFavorites = points;
+        mFirstEventId = nextUniqueId;
+        for (GeoPoint point : points) {
+            SKAnnotation a = new SKAnnotation(nextUniqueId++);
+            a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_BLUE);
+            a.setLocation(new SKCoordinate(point.getLongitude(), point.getLatitude()));
+            a.setMininumZoomLevel(minZoomLevel);
+            mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+        }
+        mLastEventId = nextUniqueId - 1;
+    }
+
+
 
     public void setStartPoint() {
         if (mStartPointAnnotation != null) {

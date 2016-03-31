@@ -12,6 +12,9 @@
     <string name="loading_register">Sending registration request...</string>
     <string name="login_wait">Logging in...</string>
     <string name="logout_wait">Logging out...</string>
+    <string name="save_location_wait">Saving location...</string>
+    <string name="loading_favorites_wait">Loading favorites...</string>
+    <string name="loading_events_wait">Loading events...</string>
     <string name="info_registered">User registered. ObjectId: %s</string>
     <string name="info_logging">Logged in. ObjectId: %s</string>
     <string name="menu_show_track">Tracks</string>
