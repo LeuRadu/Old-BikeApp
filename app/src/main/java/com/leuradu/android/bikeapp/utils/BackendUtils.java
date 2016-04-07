@@ -110,6 +110,7 @@ public class BackendUtils {
                 String dataType;
                 switch (fType) {
                     case FAVORITES:
+//                        TODO: use listener
                         dataType = "Favorites";
                         ((MapActivity)mContext).updateFavorites(response.getData());
                         break;

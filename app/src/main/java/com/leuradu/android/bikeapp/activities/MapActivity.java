@@ -58,6 +58,10 @@ import java.util.List;
  */
 public class MapActivity extends AppCompatActivity implements SKMapSurfaceListener, SKRouteListener {
 
+//  --Main application components
+//  --Main application components
+
+
 //  --Constants
     public static final String TAG = "MapActivity";
 
@@ -479,7 +483,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
     @Override
     public void onAllRoutesCompleted() {
-//      TODO: do something - when implementing alternative routes
+//      TODO: do something when implementing alternative routes
     }
 
     private class LeftMenuItemClickListener implements ListView.OnItemClickListener {
