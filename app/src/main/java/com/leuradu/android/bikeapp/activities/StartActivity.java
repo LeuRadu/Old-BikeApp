@@ -69,17 +69,22 @@ public class StartActivity extends AppCompatActivity implements SKPrepareMapText
     private void copyResources() {
         new Thread() {
             public void run() {
-                try {
-                    String tracksPath = App.getResourcesDirPath() + "GPXTracks";
-                    File tracksDir = new File(tracksPath);
-                    if (!tracksDir.exists()) {
-                        tracksDir.mkdirs();
-                    }
-                    Util.copyAssetsToFolder(getAssets(), "GPXTracks", App.getResourcesDirPath() + "GPXTracks");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                copyResource("GPXTRacks");
+                copyResource("Graphs");
             }
         }.start();
+    }
+
+    private void copyResource(String s) {
+        try {
+            String tracksPath = App.getResourcesDirPath() + s;
+            File tracksDir = new File(tracksPath);
+            if (!tracksDir.exists()) {
+                tracksDir.mkdirs();
+            }
+            Util.copyAssetsToFolder(getAssets(), s, App.getResourcesDirPath() + s);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

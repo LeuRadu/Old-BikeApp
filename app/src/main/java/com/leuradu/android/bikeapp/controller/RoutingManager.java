@@ -54,14 +54,7 @@ public class RoutingManager {
         this.routingType = type;
     }
 
-    public void startRouting() {
-        if (start == null || end == null) {
-            Toast.makeText(context, "Start and end must be set!", Toast.LENGTH_LONG).show();
-            return;
-        }
-        calculateRoute();
-    }
-
+//  Initiates routing from start to end using SDK. Start & end must be set!
     public void calculateRoute() {
         SKRouteSettings route = new SKRouteSettings();
         route.setStartCoordinate(start);

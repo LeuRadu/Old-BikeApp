@@ -4,6 +4,7 @@ import android.content.Context;
 
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.activities.MapActivity;
+import com.leuradu.android.bikeapp.utils.MapGraph;
 import com.skobbler.ngx.SKCoordinate;
 import com.skobbler.ngx.routing.SKRouteInfo;
 import com.skobbler.ngx.tracks.SKTrackElement;
@@ -54,9 +55,23 @@ public class Controller {
         return rm.getRoutingDistance(info);
     }
 
+    public boolean checkRoutingPointsSet() {
+        return ((rm.getStart() != null) && (rm.getEnd() != null));
+    }
+
+    public void calculateRoute() {
+        rm.calculateRoute();
+    }
 
     public SKTrackElement loadGPXTracks() {
         SKTracksFile tracksFile = SKTracksFile.loadAtPath(App.getResourcesDirPath() + "GPXTracks/Cluj3.gpx");
         return tracksFile.getRootTrackElement();
     }
+
+    public void initMapGraph() {
+        String path = App.getResourcesDirPath() + "Graphs/langa_gara.txt";
+        MapGraph mg = new MapGraph(path);
+        mg.computeRoute();
+    }
+
 }

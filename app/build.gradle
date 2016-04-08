@@ -27,4 +27,6 @@ dependencies {
     compile files('libs/SKMaps.jar')
     compile 'com.google.guava:guava:19.0'
     compile 'com.android.support:recyclerview-v7:23.1.1'
+    compile files('libs/gs-core-1.3.jar')
+    compile files('libs/gs-algo-1.3.jar')
 }

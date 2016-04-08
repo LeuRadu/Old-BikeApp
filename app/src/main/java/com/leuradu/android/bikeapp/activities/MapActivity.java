@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
-import android.view.Menu;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -24,6 +23,8 @@ import com.backendless.BackendlessUser;
 import com.backendless.geo.GeoPoint;
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.R;
+import com.leuradu.android.bikeapp.controller.Controller;
+import com.leuradu.android.bikeapp.model.Annotation;
 import com.leuradu.android.bikeapp.model.CustomMenuItem;
 import com.leuradu.android.bikeapp.utils.BackendUtils;
 import com.leuradu.android.bikeapp.utils.MenuListAdapter;
@@ -41,6 +42,7 @@ import com.skobbler.ngx.map.SKMapViewHolder;
 import com.skobbler.ngx.map.SKPOICluster;
 import com.skobbler.ngx.map.SKPolyline;
 import com.skobbler.ngx.map.SKScreenPoint;
+import com.skobbler.ngx.positioner.logging.SKPositionLoggingManager;
 import com.skobbler.ngx.routing.SKRouteInfo;
 import com.skobbler.ngx.routing.SKRouteJsonAnswer;
 import com.skobbler.ngx.routing.SKRouteListener;
@@ -51,6 +53,7 @@ import com.skobbler.ngx.tracks.SKTracksFile;
 import com.skobbler.ngx.tracks.SKTracksPoint;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -59,8 +62,8 @@ import java.util.List;
 public class MapActivity extends AppCompatActivity implements SKMapSurfaceListener, SKRouteListener {
 
 //  --Main application components
-//  --Main application components
-
+//  TODO: completely integrate controller in this activity
+    Controller mCtrl;
 
 //  --Constants
     public static final String TAG = "MapActivity";
@@ -82,6 +85,10 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         SHORTEST, FASTEST, QUIET
     }
 
+    public enum AnnotationType {
+        NEW, FAVORITE, EVENT, START, END
+    }
+
 //    States
     private PressType typeLongPress;
     private MapState mMapState;
@@ -99,8 +106,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 //  --Used for routing
     private SKCoordinate mStartPoint;
     private SKCoordinate mEndPoint;
-    private SKAnnotation mStartPointAnnotation;
-    private SKAnnotation mEndPointAnnotation;
+    private SKAnnotation mStartAnnotation;
+    private SKAnnotation mEndAnnotation;
     private String mRoutingDistance;
     private String mRoutingTime;
 
@@ -125,9 +132,12 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     private ArrayList<CustomMenuItem> mLeftMenu;
     private ArrayList<CustomMenuItem> mRightMenu;
     private List<GeoPoint> mFavorites;
+//    TODO: save annotation extra info here
+    private HashMap<Integer, Annotation> mAnnotationInfo;
 
 //  --Others
-    private SKAnnotation mCurrentAnnotation;
+    private SKAnnotation mCrtAnnotation;
+    private AnnotationType mCrtAnnotationType;
     private int mFirstFavoriteId;
     private int mLastFavoriteId;
     private int mFirstEventId;
@@ -150,6 +160,19 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         SKMapFragment mapFragment = (SKMapFragment)getFragmentManager().findFragmentById( R.id.map_fragment);
         mapFragment.initialise();
         mapFragment.setMapSurfaceListener(this);
+
+//        TESTING FEATURES:
+        mCtrl = new Controller(this);
+//        c.initMapGraph();
+    }
+
+    @Override
+    public void onSurfaceCreated(SKMapViewHolder skMapViewHolder) {
+        mapViewHolder = skMapViewHolder;
+        mapViewHolder.onResume();
+        mapView = mapViewHolder.getMapSurfaceView();
+
+        initialiseMapView();
     }
 
     @Override
@@ -198,7 +221,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             public void onClick(View v) {
                 if (mRouteType != RouteType.FASTEST) {
                     changeRouteType(RouteType.FASTEST);
-                    calculateRoute();
+                    mCtrl.setRoutingType(RouteType.FASTEST);
+                    mCtrl.calculateRoute();
                 }
             }
         });
@@ -208,7 +232,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             public void onClick(View v) {
                 if (mRouteType != RouteType.SHORTEST) {
                     changeRouteType(RouteType.SHORTEST);
-                    calculateRoute();
+                    mCtrl.setRoutingType(RouteType.SHORTEST);
+                    mCtrl.calculateRoute();
                 }
             }
         });
@@ -218,7 +243,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             public void onClick(View v) {
                 if (mRouteType != RouteType.QUIET) {
                     changeRouteType(RouteType.QUIET);
-                    calculateRoute();
+                    mCtrl.setRoutingType(RouteType.QUIET);
+                    mCtrl.calculateRoute();
                 }
             }
         });
@@ -276,45 +302,9 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mUserLoggedIn = false;
         mStartPoint = null;
         mEndPoint = null;
-        mStartPointAnnotation = null;
-        mEndPointAnnotation = null;
-        mCurrentAnnotation = null;
-    }
-
-//    Sets mRouteType to new type and changes button text color to reflect change
-    private void changeRouteType(RouteType type) {
-        switch (mRouteType) {
-            case SHORTEST:
-                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.black));
-                break;
-            case FASTEST:
-                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.black));
-                break;
-            case QUIET:
-                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.black));
-                break;
-        }
-        switch (type) {
-            case SHORTEST:
-                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.red));
-                break;
-            case FASTEST:
-                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.red));
-                break;
-            case QUIET:
-                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.red));
-                break;
-        }
-        mRouteType = type;
-    }
-
-    @Override
-    public void onSurfaceCreated(SKMapViewHolder skMapViewHolder) {
-        mapViewHolder = skMapViewHolder;
-        mapViewHolder.onResume();
-        mapView = mapViewHolder.getMapSurfaceView();
-
-        initialiseMapView();
+        mStartAnnotation = null;
+        mEndAnnotation = null;
+        mCrtAnnotation = null;
     }
 
     private void initialiseMapView() {
@@ -332,52 +322,16 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         }
     }
 
-
-//    Draws the tracks in a gpx file as polylines
-    private void drawGPXTracks() {
-//        TODO: Use a better GPX file for presentation!
-//        TODO: Find a way to draw routes over the tracks!
-        SKTracksFile tracksFile = SKTracksFile.loadAtPath(App.getResourcesDirPath() + "GPXTracks/Cluj3.gpx");
-        SKTrackElement root =tracksFile.getRootTrackElement();
-
-        for (SKTrackElement child : root.getChildElements()) {
-            {
-//                Log.d(TAG, "Found child of type: " + typeToString(child.getType()));
-//                for (SKTracksPoint point : child.getPointsOnTrackElement()) {
-//                    Log.d(TAG, "Point: " + point.getLongitude() + ", " + point.getLatitude());
-//                }
-                drawPolyline(child);
-            }
-        }
-    }
-
-//    Draws an SKTrackElement as a polyline
-    private void drawPolyline(SKTrackElement track) {
-        SKPolyline polyline = new SKPolyline();
-        ArrayList<SKCoordinate> nodes = new ArrayList<SKCoordinate>();
-
-        for (SKTracksPoint point : track.getPointsOnTrackElement()) {
-            nodes.add(new SKCoordinate(point.getLongitude(), point.getLatitude()));
-        }
-        polyline.setNodes(nodes);
-        polyline.setColor(new float[]{0f, 0f, 1f, 0.5f});
-        polyline.setOutlineColor(new float[]{0.1f, 1f, 0.1f, 1f});
-//        polyline.setLineSize(20);
-        polyline.setOutlineSize(15);
-        int id = nextUniqueId++;
-        polyline.setIdentifier(id);
-        mapView.addPolyline(polyline);
-    }
-
     @Override
     public void onLongPress(SKScreenPoint skScreenPoint) {
-        Log.d(TAG, "Long pressed!");
         SKCoordinate point = mapView.pointToCoordinate(skScreenPoint);
         switch (typeLongPress) {
             case NORMAL:
-                addAnnotation(point,SKAnnotation.SK_ANNOTATION_TYPE_MARKER);
-                createPopup(mCurrentAnnotation);
+                SKAnnotation a = createAnnotation(point, AnnotationType.NEW);
+                setCrtAnnotation(a, AnnotationType.NEW);
+                showPopup(a);
                 break;
+//            TODO: eliminate this useless part
             case SELECT_ROUTE_START:
                 break;
             case SELECT_ROUTE_DESTINATION:
@@ -385,133 +339,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         }
     }
 
-//    Adds a annotation in coordinates "point" of given type and saves in mCurrentAnnotation
-    private void addAnnotation(SKCoordinate point, int type) {
-        int id = nextUniqueId++;
-        if (mCurrentAnnotation != null) {
-            mapView.deleteAnnotation(mCurrentAnnotation.getUniqueID());
-            dismissPopup();
-        }
-        mCurrentAnnotation= new SKAnnotation(id);
-        mCurrentAnnotation.setLocation(point);
-        mCurrentAnnotation.setMininumZoomLevel(minZoomLevel);
-        mCurrentAnnotation.setAnnotationType(type);
-        mapView.addAnnotation(mCurrentAnnotation, SKAnimationSettings.ANIMATION_NONE);
-    }
-
-    @Override
-    public void onAnnotationSelected(SKAnnotation annotation) {
-        int id = annotation.getUniqueID();
-        Toast.makeText(this, "Id: "+id, Toast.LENGTH_SHORT).show();
-        createPopup(annotation);
-    }
-
-//    TODO: different Popup for different annotation type
-    private void createPopup(SKAnnotation annotation) {
-        SKCalloutView view = mapViewHolder.getCalloutView();
-        view.setVisibility(View.VISIBLE);
-//        view.setTitle(loc.getTitle()).setDescription(loc.getDescription());
-        view.setViewColor(getResources().getColor(R.color.gray));
-        view.setLeftImage(getResources().getDrawable(R.drawable.courage));
-        view.setVerticalOffset(30f);
-        view.setOnRightImageClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mDrawerLayout.openDrawer(mListViewRight);
-            }
-        });
-        view.showAtLocation(annotation.getLocation(), true);
-    }
-
-    private void dismissPopup() {
-        mapViewHolder.getCalloutView().setVisibility(View.GONE);
-    }
-
-    public void startRouting() {
-        if (mStartPoint == null || mEndPoint == null) {
-            Toast.makeText(this,"Start and end must be set!",Toast.LENGTH_LONG).show();
-            return;
-        }
-        mMapState = MapState.ROUTING;
-        mRoutingLayout.setVisibility(View.VISIBLE);
-        calculateRoute();
-    }
-
-    public void closeRouting() {
-        mMapState = MapState.DEFAULT;
-        SKRouteManager.getInstance().clearCurrentRoute();
-        findViewById(R.id.layout_routing).setVisibility(View.GONE);
-    }
-
-    public void calculateRoute() {
-        SKRouteSettings route = new SKRouteSettings();
-        route.setStartCoordinate(mStartPoint);
-        route.setDestinationCoordinate(mEndPoint);
-        route.setNoOfRoutes(1);
-        switch (mRouteType) {
-            case SHORTEST:
-                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_SHORTEST);
-                break;
-            case FASTEST:
-                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_FASTEST);
-                break;
-            case QUIET:
-                route.setRouteMode(SKRouteSettings.SKRouteMode.BICYCLE_QUIETEST);
-                break;
-        }
-        route.setRouteExposed(true);
-        SKRouteManager.getInstance().calculateRoute(route);
-    }
-
-    //    Unimplemented route listener methods
-    @Override
-
-    public void onRouteCalculationCompleted(SKRouteInfo skRouteInfo) {
-//          TODO: rewrite this when computing alternative routes!
-        mRoutingDistance = skRouteInfo.getDistance() + "m";
-        int seconds = skRouteInfo.getEstimatedTime();
-        int minutes = (seconds / 60) % 60;
-        int hours = (seconds / 3600);
-        if (hours != 0) {
-            mRoutingTime = hours + "h " + minutes + "min";
-        } else {
-            mRoutingTime = minutes + "min";
-        }
-        mTextRoutingTime.setText(mRoutingTime);
-        mTextRoutingDistance.setText(mRoutingDistance);
-    }
-
-    @Override
-    public void onAllRoutesCompleted() {
-//      TODO: do something when implementing alternative routes
-    }
-
-    private class LeftMenuItemClickListener implements ListView.OnItemClickListener {
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            MenuAction action = mLeftMenu.get(position).getMenuAction();
-            switch (action) {
-//                TODO: maybe move this to menuAction()? (would need to have checkbox var somewhere)
-                case SHOW_BIKE_LANES:
-                case SHOW_FAVORITES:
-                case SHOW_EVENTS:
-                    CheckBox cb = (CheckBox) view.findViewById(R.id.menu_item_checkbox);
-                    cb.setChecked(!cb.isChecked());
-                    break;
-            }
-            menuAction(action);
-        }
-
-    }
-    private class RightMenuItemClickListener implements ListView.OnItemClickListener {
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            if (mDrawerLayout.isDrawerOpen(mListViewRight)) {
-                mDrawerLayout.closeDrawer(mListViewRight);
-            }
-            menuAction(mRightMenu.get(position).getMenuAction());
-        }
-    }
+//  ----------- MENU ----------------
 
     private void menuAction(MenuAction action) {
         SKCoordinate point;
@@ -538,8 +366,6 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             case SET_END_POINT:
                 closeDrawers();
                 setEndPoint();
-                if (mStartPoint != null)
-                    startRouting();
                 break;
             case LOGIN:
                 startActivity(LoginActivity.newIntent(this));
@@ -561,13 +387,13 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             case SAVE_TO_FAVORITES:
                 closeDrawers();
 //                TODO: use dialog to add name/descr
-                point = mCurrentAnnotation.getLocation();
+                point = mCrtAnnotation.getLocation();
                 BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
                         "Placeholder_name", "Placeholder_descr","Favorites");
                 if (mFavoritesShown) {
 //                    TODO: must sync this, or last item is not added at all
                     refreshFavorites();
-                    mapView.deleteAnnotation(mCurrentAnnotation.getUniqueID());
+                    mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
                 }
                 break;
             case SHOW_EVENTS:
@@ -580,15 +406,288 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 break;
             case SAVE_TO_EVENTS:
                 closeDrawers();
-                point = mCurrentAnnotation.getLocation();
+                point = mCrtAnnotation.getLocation();
                 BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
                         "Placeholder_name", "Placeholder_descr", "Events");
                 if (mEventsShown) {
                     refreshEvents();
-                    mapView.deleteAnnotation(mCurrentAnnotation.getUniqueID());
+                    mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
                 }
         }
     }
+
+    private class LeftMenuItemClickListener implements ListView.OnItemClickListener {
+        @Override
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            MenuAction action = mLeftMenu.get(position).getMenuAction();
+            switch (action) {
+//                TODO: maybe move this to menuAction()? (would need to have checkbox var somewhere)
+                case SHOW_BIKE_LANES:
+                case SHOW_FAVORITES:
+                case SHOW_EVENTS:
+                    CheckBox cb = (CheckBox) view.findViewById(R.id.menu_item_checkbox);
+                    cb.setChecked(!cb.isChecked());
+                    break;
+            }
+            menuAction(action);
+        }
+    }
+    private class RightMenuItemClickListener implements ListView.OnItemClickListener {
+
+        @Override
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            if (mDrawerLayout.isDrawerOpen(mListViewRight)) {
+                mDrawerLayout.closeDrawer(mListViewRight);
+            }
+            menuAction(mRightMenu.get(position).getMenuAction());
+        }
+
+    }
+
+
+//  ------------------ Annotations ---------------
+
+    @Override
+    public void onAnnotationSelected(SKAnnotation a) {
+        dismissPopup();
+        Log.d("Annotation", " SELECTED");
+//        setCrtAnnotation(a);
+        int id = a.getUniqueID();
+        Toast.makeText(this, "Id: "+id, Toast.LENGTH_SHORT).show();
+        showPopup(a);
+    }
+
+//  Creates an Annotation in coordinate point of given type.
+    private SKAnnotation createAnnotation(SKCoordinate point, AnnotationType type) {
+        int id = nextUniqueId++;
+        SKAnnotation a = new SKAnnotation(id);
+        a.setLocation(point);
+        a.setMininumZoomLevel(minZoomLevel);
+//      TODO: use custom images (at least for favorites) and set offset
+        switch (type) {
+            case NEW:
+                a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_MARKER);
+                break;
+            case START:
+                a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_GREEN);
+                break;
+            case END:
+                a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_RED);
+                break;
+            case EVENT:
+                a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_BLUE);
+                break;
+            case FAVORITE:
+                a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_PURPLE);
+                break;
+        }
+        mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+        return a;
+    }
+
+    private SKAnnotation getCrtAnnotation() {
+        return mCrtAnnotation;
+    }
+
+    private void setCrtAnnotation(SKAnnotation a, AnnotationType type) {
+        clearCrtAnnotation();
+        dismissPopup();
+        mCrtAnnotation = a;
+        mCrtAnnotationType = type;
+        mapView.updateAnnotation(getCrtAnnotation());
+    }
+    
+    private void clearCrtAnnotation() {
+        if (mCrtAnnotation != null)
+            mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
+    }
+
+    public SKAnnotation getStartAnnotation() {
+        return mStartAnnotation;
+    }
+
+    public void setStartAnnotation(SKAnnotation startAnnotation) {
+        mStartAnnotation = startAnnotation;
+    }
+
+    public SKAnnotation getEndAnnotation() {
+        return mEndAnnotation;
+    }
+
+    public void setEndAnnotation(SKAnnotation endAnnotation) {
+        mEndAnnotation = endAnnotation;
+    }
+
+    //    TODO: different Popup for different annotation type
+    //    TODO: show info depending on annotation
+    private void showPopup(SKAnnotation a) {
+        SKCalloutView view = mapViewHolder.getCalloutView();
+        view.setVisibility(View.VISIBLE);
+        view.setViewColor(getResources().getColor(R.color.gray));
+        view.setLeftImage(getResources().getDrawable(R.drawable.courage));
+        view.setVerticalOffset(30f);
+        view.setOnRightImageClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mDrawerLayout.openDrawer(mListViewRight);
+            }
+        });
+        view.showAtLocation(a.getLocation(), true);
+    }
+
+    private void dismissPopup() {
+        mapViewHolder.getCalloutView().setVisibility(View.GONE);
+    }
+
+//  ------------- Routing methods -------------------
+
+    //    Sets mRouteType to new type and changes button text color to reflect change
+    private void changeRouteType(RouteType type) {
+        switch (mRouteType) {
+            case SHORTEST:
+                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.black));
+                break;
+            case FASTEST:
+                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.black));
+                break;
+            case QUIET:
+                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.black));
+                break;
+        }
+        switch (type) {
+            case SHORTEST:
+                mButtonRouteShortest.setTextColor(getResources().getColor(R.color.red));
+                break;
+            case FASTEST:
+                mButtonRouteFastest.setTextColor(getResources().getColor(R.color.red));
+                break;
+            case QUIET:
+                mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.red));
+                break;
+        }
+        mRouteType = type;
+    }
+
+    public void setStartPoint() {
+        if (getStartAnnotation() != null) {
+            mapView.deleteAnnotation(getStartAnnotation().getUniqueID());
+        }
+        SKCoordinate location = SKCoordinate.copyOf(getCrtAnnotation().getLocation());
+        mCtrl.setRoutingStart(location);
+        SKAnnotation a = createAnnotation(location, AnnotationType.START);
+        setStartAnnotation(a);
+        clearCrtAnnotation();
+        dismissPopup();
+    }
+
+    private void setEndPoint() {
+        if (getEndAnnotation() != null) {
+            mapView.deleteAnnotation(getEndAnnotation().getUniqueID());
+        }
+        SKCoordinate location = SKCoordinate.copyOf(getCrtAnnotation().getLocation());
+        mCtrl.setRoutingEnd(location);
+        SKAnnotation a = createAnnotation(location, AnnotationType.END);
+        setEndAnnotation(a);
+        clearCrtAnnotation();
+        dismissPopup();
+    }
+
+    public void startRouting() {
+        Log.d("ROUTE start", mCtrl.getRoutingStart().toString());
+        Log.d("ROUTE end", mCtrl.getRoutingEnd().toString());
+        Log.d("ROUTE check", mCtrl.checkRoutingPointsSet()+"");
+
+        if (!mCtrl.checkRoutingPointsSet()) {
+            Toast.makeText(this,"Start and end must be set!",Toast.LENGTH_LONG).show();
+            return;
+        }
+        mCtrl.calculateRoute();
+        mMapState = MapState.ROUTING;
+        mRoutingLayout.setVisibility(View.VISIBLE);
+    }
+
+    public void closeRouting() {
+        mMapState = MapState.DEFAULT;
+        SKRouteManager.getInstance().clearCurrentRoute();
+        findViewById(R.id.layout_routing).setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onRouteCalculationCompleted(SKRouteInfo skRouteInfo) {
+//          TODO: rewrite this when computing alternative routes!
+        mRoutingDistance = skRouteInfo.getDistance() + "m";
+        int seconds = skRouteInfo.getEstimatedTime();
+        int minutes = (seconds / 60) % 60;
+        int hours = (seconds / 3600);
+        if (hours != 0) {
+            mRoutingTime = hours + "h " + minutes + "min";
+        } else {
+            mRoutingTime = minutes + "min";
+        }
+        mTextRoutingTime.setText(mRoutingTime);
+        mTextRoutingDistance.setText(mRoutingDistance);
+    }
+
+    @Override
+    public void onAllRoutesCompleted() {
+//      TODO: do something when implementing alternative routes
+    }
+
+
+//  ---------------- Tracks -----------------
+
+
+    //    Draws the tracks in a gpx file as polylines
+    private void drawGPXTracks() {
+//        TODO: Use a better GPX file for presentation!
+//        TODO: Find a way to draw routes over the tracks!
+        SKTracksFile tracksFile = SKTracksFile.loadAtPath(App.getResourcesDirPath() + "GPXTracks/Cluj3.gpx");
+        SKTrackElement root =tracksFile.getRootTrackElement();
+
+        for (SKTrackElement child : root.getChildElements()) {
+            {
+//                Log.d(TAG, "Found child of type: " + typeToString(child.getType()));
+//                for (SKTracksPoint point : child.getPointsOnTrackElement()) {
+//                    Log.d(TAG, "Point: " + point.getLongitude() + ", " + point.getLatitude());
+//                }
+                drawPolyline(child);
+            }
+        }
+    }
+
+    //    Draws an SKTrackElement as a polyline
+    private void drawPolyline(SKTrackElement track) {
+        SKPolyline polyline = new SKPolyline();
+        ArrayList<SKCoordinate> nodes = new ArrayList<SKCoordinate>();
+
+        for (SKTracksPoint point : track.getPointsOnTrackElement()) {
+            nodes.add(new SKCoordinate(point.getLongitude(), point.getLatitude()));
+        }
+        polyline.setNodes(nodes);
+        polyline.setColor(new float[]{0f, 0f, 1f, 0.5f});
+        polyline.setOutlineColor(new float[]{0.1f, 1f, 0.1f, 1f});
+//        polyline.setLineSize(20);
+        polyline.setOutlineSize(15);
+        int id = nextUniqueId++;
+        polyline.setIdentifier(id);
+        mapView.addPolyline(polyline);
+    }
+
+    private void startTrackRecording() {
+        SKPositionLoggingManager manager = SKPositionLoggingManager.getInstance();
+        String path = App.getResourcesDirPath() + "tracklog.gpx";
+        SKPositionLoggingManager.SPositionLoggingType type =
+                SKPositionLoggingManager.SPositionLoggingType.SK_POSITION_LOGGING_TYPE_GPX;
+        manager.startLoggingPositions(path, type);
+    }
+
+    private void stopTrackRecording() {
+        SKPositionLoggingManager manager = SKPositionLoggingManager.getInstance();
+        manager.stopLoggingPositions();
+    }
+
+
+//  ---------- User Data ---------------------
 
     private void showEvents() {
         BackendUtils.fetchData(this, BackendUtils.DataType.EVENTS);
@@ -626,14 +725,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mFavorites = points;
         mFirstFavoriteId = nextUniqueId;
         for (GeoPoint point : points) {
-//            TODO: create a general method for adding annotations
-            SKAnnotation a = new SKAnnotation(nextUniqueId++);
-//            TODO: change to custom view (star?)
-            a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_PURPLE);
-            a.setLocation(new SKCoordinate(point.getLongitude(), point.getLatitude()));
-            a.setMininumZoomLevel(minZoomLevel);
-//            TODO: set offset properly - everywhere with annotations
-            mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+            createAnnotation(new SKCoordinate(point.getLongitude(), point.getLatitude()),AnnotationType.EVENT);
         }
         mLastFavoriteId = nextUniqueId - 1;
     }
@@ -644,42 +736,14 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mFavorites = points;
         mFirstEventId = nextUniqueId;
         for (GeoPoint point : points) {
-            SKAnnotation a = new SKAnnotation(nextUniqueId++);
-            a.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_BLUE);
-            a.setLocation(new SKCoordinate(point.getLongitude(), point.getLatitude()));
-            a.setMininumZoomLevel(minZoomLevel);
-            mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+            createAnnotation(new SKCoordinate(point.getLongitude(), point.getLatitude()),AnnotationType.EVENT);
         }
         mLastEventId = nextUniqueId - 1;
     }
 
 
 
-    public void setStartPoint() {
-        if (mStartPointAnnotation != null) {
-            mapView.deleteAnnotation(mStartPointAnnotation.getUniqueID());
-        }
-        mStartPoint = mCurrentAnnotation.getLocation();
-        mStartPointAnnotation = mCurrentAnnotation;
-        mStartPointAnnotation.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_GREEN);
-        mCurrentAnnotation = null;
-        mapView.updateAnnotation(mStartPointAnnotation);
-        dismissPopup();
-    }
-
-    private void setEndPoint() {
-        if (mEndPointAnnotation != null) {
-            mapView.deleteAnnotation(mEndPointAnnotation.getUniqueID());
-        }
-        mEndPoint = mCurrentAnnotation.getLocation();
-        mEndPointAnnotation = mCurrentAnnotation;
-        mEndPointAnnotation.setAnnotationType(SKAnnotation.SK_ANNOTATION_TYPE_RED);
-        mCurrentAnnotation = null;
-        mapView.updateAnnotation(mEndPointAnnotation);
-        dismissPopup();
-    }
-
-    //    Unused (yet) interface methods --------------
+    //   ------------ Unused (yet) interface methods --------------
 
     @Override
     public void onActionPan() {
