@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.support.v4.app.FragmentManager;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
@@ -24,9 +25,11 @@ import com.backendless.geo.GeoPoint;
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.R;
 import com.leuradu.android.bikeapp.controller.Controller;
-import com.leuradu.android.bikeapp.model.Annotation;
+import com.leuradu.android.bikeapp.dialogs.FavoriteFragment;
 import com.leuradu.android.bikeapp.model.CustomMenuItem;
-import com.leuradu.android.bikeapp.utils.BackendUtils;
+import com.leuradu.android.bikeapp.model.Event;
+import com.leuradu.android.bikeapp.model.Favorite;
+import com.leuradu.android.bikeapp.repository.BackendManager;
 import com.leuradu.android.bikeapp.utils.MenuListAdapter;
 import com.skobbler.ngx.SKCoordinate;
 import com.skobbler.ngx.map.SKAnimationSettings;
@@ -47,13 +50,10 @@ import com.skobbler.ngx.routing.SKRouteInfo;
 import com.skobbler.ngx.routing.SKRouteJsonAnswer;
 import com.skobbler.ngx.routing.SKRouteListener;
 import com.skobbler.ngx.routing.SKRouteManager;
-import com.skobbler.ngx.routing.SKRouteSettings;
 import com.skobbler.ngx.tracks.SKTrackElement;
-import com.skobbler.ngx.tracks.SKTracksFile;
 import com.skobbler.ngx.tracks.SKTracksPoint;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -67,18 +67,11 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
 //  --Constants
     public static final String TAG = "MapActivity";
+    public static final String DIALOG_FAVORITES = "dialog_favorites";
 
     public enum MenuAction {
         NOACTION, SHOW_BIKE_LANES, ROUTE, SET_STARTING_POINT, SET_END_POINT, LOGIN, LOGOUT,
         SHOW_FAVORITES, SHOW_EVENTS, SAVE_TO_FAVORITES, SAVE_TO_EVENTS
-    }
-
-    public enum PressType {
-        NORMAL, SELECT_ROUTE_START, SELECT_ROUTE_DESTINATION
-    }
-
-    public enum MapState {
-        DEFAULT, ROUTING
     }
 
     public enum RouteType {
@@ -90,9 +83,6 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     }
 
 //    States
-    private PressType typeLongPress;
-    private MapState mMapState;
-    private RouteType mRouteType;
     private boolean mBikeLanesShown;
     private boolean mFavoritesShown;
     private boolean mEventsShown;
@@ -104,12 +94,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     private static int nextUniqueId = 20;
 
 //  --Used for routing
-    private SKCoordinate mStartPoint;
-    private SKCoordinate mEndPoint;
     private SKAnnotation mStartAnnotation;
     private SKAnnotation mEndAnnotation;
-    private String mRoutingDistance;
-    private String mRoutingTime;
 
 //  --SKMap-specific objects
     private SKMapViewHolder mapViewHolder;
@@ -131,17 +117,14 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 //  --Collections
     private ArrayList<CustomMenuItem> mLeftMenu;
     private ArrayList<CustomMenuItem> mRightMenu;
-    private List<GeoPoint> mFavorites;
-//    TODO: save annotation extra info here
-    private HashMap<Integer, Annotation> mAnnotationInfo;
+
+    private List<Integer> mFavoriteAnnotations;
+    private List<Integer> mEventAnnotations;
 
 //  --Others
-    private SKAnnotation mCrtAnnotation;
-    private AnnotationType mCrtAnnotationType;
-    private int mFirstFavoriteId;
-    private int mLastFavoriteId;
-    private int mFirstEventId;
-    private int mLastEventId;
+    private SKAnnotation mMarkerAnnotation;
+    private SKAnnotation mSelectedAnnotation;
+
 
     public static Intent newIntent(Context context) {
         return new Intent(context, MapActivity.class);
@@ -163,6 +146,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
 //        TESTING FEATURES:
         mCtrl = new Controller(this);
+//          TODO: remove auto login
+        Backendless.UserService.login("radu@yahoo.com", "pass", null);
 //        c.initMapGraph();
     }
 
@@ -186,7 +171,6 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         super.onResume();
         BackendlessUser user = Backendless.UserService.CurrentUser();
         Log.d("onResume", "" + ((user == null) ? "null" : "User: " + user.getEmail()));
-//          TODO: find a better way to update left menu after login
         if (user != null) {
             mUserLoggedIn = true;
             initDrawers();
@@ -213,13 +197,14 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             @Override
             public void onClick(View v) {
                 closeRouting();
+                clearRoutingAnnotations();
             }
         });
 
         mButtonRouteFastest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mRouteType != RouteType.FASTEST) {
+                if (mCtrl.getRoutingType() != RouteType.FASTEST) {
                     changeRouteType(RouteType.FASTEST);
                     mCtrl.setRoutingType(RouteType.FASTEST);
                     mCtrl.calculateRoute();
@@ -230,7 +215,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mButtonRouteShortest.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mRouteType != RouteType.SHORTEST) {
+                if (mCtrl.getRoutingType() != RouteType.SHORTEST) {
                     changeRouteType(RouteType.SHORTEST);
                     mCtrl.setRoutingType(RouteType.SHORTEST);
                     mCtrl.calculateRoute();
@@ -241,7 +226,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mButtonRouteQuiet.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (mRouteType != RouteType.QUIET) {
+                if (mCtrl.getRoutingType() != RouteType.QUIET) {
                     changeRouteType(RouteType.QUIET);
                     mCtrl.setRoutingType(RouteType.QUIET);
                     mCtrl.calculateRoute();
@@ -261,7 +246,6 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         Drawable courage = getResources().getDrawable(R.drawable.courage);
 
         mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "YOUR ACCOUNT"));
-//          TODO: another way to create/update drawer menus (no complete recreation)
         if (mUserLoggedIn) {
             mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, info,
                     "Welcome, " + Backendless.UserService.CurrentUser().getProperty("name")));
@@ -294,17 +278,15 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     }
 
     private void initVariables() {
-        typeLongPress = PressType.NORMAL;
-        mMapState = MapState.DEFAULT;
-        mRouteType = RouteType.SHORTEST;
+        mFavoriteAnnotations = new ArrayList<>();
+        mEventAnnotations = new ArrayList<>();
         mBikeLanesShown = false;
         mFavoritesShown = false;
         mUserLoggedIn = false;
-        mStartPoint = null;
-        mEndPoint = null;
         mStartAnnotation = null;
         mEndAnnotation = null;
-        mCrtAnnotation = null;
+        mMarkerAnnotation = null;
+        mSelectedAnnotation = null;
     }
 
     private void initialiseMapView() {
@@ -325,18 +307,9 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     @Override
     public void onLongPress(SKScreenPoint skScreenPoint) {
         SKCoordinate point = mapView.pointToCoordinate(skScreenPoint);
-        switch (typeLongPress) {
-            case NORMAL:
-                SKAnnotation a = createAnnotation(point, AnnotationType.NEW);
-                setCrtAnnotation(a, AnnotationType.NEW);
-                showPopup(a);
-                break;
-//            TODO: eliminate this useless part
-            case SELECT_ROUTE_START:
-                break;
-            case SELECT_ROUTE_DESTINATION:
-                break;
-        }
+        SKAnnotation a = createAnnotation(point, AnnotationType.NEW);
+        setMarkerAnnotation(a, AnnotationType.NEW);
+        showPopup(a);
     }
 
 //  ----------- MENU ----------------
@@ -371,48 +344,45 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 startActivity(LoginActivity.newIntent(this));
                 break;
             case LOGOUT:
-//                TODO: find a way to update menu
                 closeDrawers();
-                BackendUtils.logout(this);
+                mCtrl.logout(this);
+                mUserLoggedIn = false;
                 initDrawers();
                 break;
             case SHOW_FAVORITES:
                 if (mFavoritesShown) {
-                    removeFavorites();
+                    clearFavorites();
                 } else {
-                    showFavorites();
+                    loadFavorites();
                 }
                 mFavoritesShown = !mFavoritesShown;
                 break;
             case SAVE_TO_FAVORITES:
                 closeDrawers();
-//                TODO: use dialog to add name/descr
-                point = mCrtAnnotation.getLocation();
-                BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
-                        "Placeholder_name", "Placeholder_descr","Favorites");
-                if (mFavoritesShown) {
-//                    TODO: must sync this, or last item is not added at all
-                    refreshFavorites();
-                    mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
-                }
+                point = mSelectedAnnotation.getLocation();
+                FragmentManager fm = getSupportFragmentManager();
+                FavoriteFragment fragment = FavoriteFragment.newInstance(point,mCtrl);
+                fragment.show(fm, DIALOG_FAVORITES);
+                clearMarkerAnnotation();
+                dismissPopup();
+//              TODO: manually add saved favorite to annotations
                 break;
             case SHOW_EVENTS:
                 if (mEventsShown) {
-                    removeEvents();
+                    clearEvents();
                 } else {
-                    showEvents();
+                    loadEvents();
                 }
                 mEventsShown = !mEventsShown;
                 break;
             case SAVE_TO_EVENTS:
                 closeDrawers();
-                point = mCrtAnnotation.getLocation();
-                BackendUtils.saveGeoPoint(this, point.getLongitude(), point.getLatitude(),
-                        "Placeholder_name", "Placeholder_descr", "Events");
-                if (mEventsShown) {
-                    refreshEvents();
-                    mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
-                }
+                point = mMarkerAnnotation.getLocation();
+                Intent intent = EventActivity.newIntent(this,point,mCtrl);
+                startActivity(intent);
+                clearMarkerAnnotation();
+                dismissPopup();
+//                TODO: refresh events? at resume
         }
     }
 
@@ -451,9 +421,10 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     public void onAnnotationSelected(SKAnnotation a) {
         dismissPopup();
         Log.d("Annotation", " SELECTED");
-//        setCrtAnnotation(a);
+//        setMarkerAnnotation(a);
         int id = a.getUniqueID();
         Toast.makeText(this, "Id: "+id, Toast.LENGTH_SHORT).show();
+        setSelectedAnnotation(a);
         showPopup(a);
     }
 
@@ -485,21 +456,34 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         return a;
     }
 
-    private SKAnnotation getCrtAnnotation() {
-        return mCrtAnnotation;
+    private SKAnnotation getMarkerAnnotation() {
+        return mMarkerAnnotation;
     }
 
-    private void setCrtAnnotation(SKAnnotation a, AnnotationType type) {
-        clearCrtAnnotation();
+    private void setMarkerAnnotation(SKAnnotation a, AnnotationType type) {
+        clearMarkerAnnotation();
+        setSelectedAnnotation(a);
         dismissPopup();
-        mCrtAnnotation = a;
-        mCrtAnnotationType = type;
-        mapView.updateAnnotation(getCrtAnnotation());
+        mMarkerAnnotation = a;
+        mapView.updateAnnotation(getMarkerAnnotation());
     }
     
-    private void clearCrtAnnotation() {
-        if (mCrtAnnotation != null)
-            mapView.deleteAnnotation(mCrtAnnotation.getUniqueID());
+    private void clearMarkerAnnotation() {
+        if (mMarkerAnnotation != null)
+            mapView.deleteAnnotation(mMarkerAnnotation.getUniqueID());
+    }
+
+    private void setSelectedAnnotation(SKAnnotation a) {
+        mSelectedAnnotation = a;
+    }
+
+    private SKAnnotation getSelectedAnnotation() {
+        return mSelectedAnnotation;
+    }
+
+    private void clearSelectedAnnotation() {
+        if (mSelectedAnnotation != null)
+            mapView.deleteAnnotation(mSelectedAnnotation.getUniqueID());
     }
 
     public SKAnnotation getStartAnnotation() {
@@ -518,6 +502,16 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mEndAnnotation = endAnnotation;
     }
 
+    public void clearRoutingAnnotations() {
+        if (mStartAnnotation != null) {
+            mapView.deleteAnnotation(mStartAnnotation.getUniqueID());
+        }
+        if (mEndAnnotation!= null) {
+            mapView.deleteAnnotation(mEndAnnotation.getUniqueID());
+        }
+        mStartAnnotation = null;
+        mEndAnnotation = null;
+    }
     //    TODO: different Popup for different annotation type
     //    TODO: show info depending on annotation
     private void showPopup(SKAnnotation a) {
@@ -541,9 +535,9 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
 //  ------------- Routing methods -------------------
 
-    //    Sets mRouteType to new type and changes button text color to reflect change
+    //    Sets routing type to new type and changes button text color to reflect change
     private void changeRouteType(RouteType type) {
-        switch (mRouteType) {
+        switch (mCtrl.getRoutingType()) {
             case SHORTEST:
                 mButtonRouteShortest.setTextColor(getResources().getColor(R.color.black));
                 break;
@@ -565,18 +559,18 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 mButtonRouteQuiet.setTextColor(getResources().getColor(R.color.red));
                 break;
         }
-        mRouteType = type;
+        mCtrl.setRoutingType(type);
     }
 
     public void setStartPoint() {
         if (getStartAnnotation() != null) {
             mapView.deleteAnnotation(getStartAnnotation().getUniqueID());
         }
-        SKCoordinate location = SKCoordinate.copyOf(getCrtAnnotation().getLocation());
+        SKCoordinate location = SKCoordinate.copyOf(getSelectedAnnotation().getLocation());
         mCtrl.setRoutingStart(location);
         SKAnnotation a = createAnnotation(location, AnnotationType.START);
         setStartAnnotation(a);
-        clearCrtAnnotation();
+        clearSelectedAnnotation();
         dismissPopup();
     }
 
@@ -584,48 +578,33 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         if (getEndAnnotation() != null) {
             mapView.deleteAnnotation(getEndAnnotation().getUniqueID());
         }
-        SKCoordinate location = SKCoordinate.copyOf(getCrtAnnotation().getLocation());
+        SKCoordinate location = SKCoordinate.copyOf(getSelectedAnnotation().getLocation());
         mCtrl.setRoutingEnd(location);
         SKAnnotation a = createAnnotation(location, AnnotationType.END);
         setEndAnnotation(a);
-        clearCrtAnnotation();
+        clearSelectedAnnotation();
         dismissPopup();
     }
 
     public void startRouting() {
-        Log.d("ROUTE start", mCtrl.getRoutingStart().toString());
-        Log.d("ROUTE end", mCtrl.getRoutingEnd().toString());
-        Log.d("ROUTE check", mCtrl.checkRoutingPointsSet()+"");
-
         if (!mCtrl.checkRoutingPointsSet()) {
             Toast.makeText(this,"Start and end must be set!",Toast.LENGTH_LONG).show();
             return;
         }
         mCtrl.calculateRoute();
-        mMapState = MapState.ROUTING;
         mRoutingLayout.setVisibility(View.VISIBLE);
     }
 
     public void closeRouting() {
-        mMapState = MapState.DEFAULT;
         SKRouteManager.getInstance().clearCurrentRoute();
         findViewById(R.id.layout_routing).setVisibility(View.GONE);
     }
 
     @Override
-    public void onRouteCalculationCompleted(SKRouteInfo skRouteInfo) {
+    public void onRouteCalculationCompleted(SKRouteInfo info) {
 //          TODO: rewrite this when computing alternative routes!
-        mRoutingDistance = skRouteInfo.getDistance() + "m";
-        int seconds = skRouteInfo.getEstimatedTime();
-        int minutes = (seconds / 60) % 60;
-        int hours = (seconds / 3600);
-        if (hours != 0) {
-            mRoutingTime = hours + "h " + minutes + "min";
-        } else {
-            mRoutingTime = minutes + "min";
-        }
-        mTextRoutingTime.setText(mRoutingTime);
-        mTextRoutingDistance.setText(mRoutingDistance);
+        mTextRoutingTime.setText(mCtrl.getRoutingTime(info));
+        mTextRoutingDistance.setText(mCtrl.getRoutingDistance(info));
     }
 
     @Override
@@ -639,19 +618,11 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
     //    Draws the tracks in a gpx file as polylines
     private void drawGPXTracks() {
-//        TODO: Use a better GPX file for presentation!
+//        TODO: Use a better GPX file for presentation - maybe parse OSM?
 //        TODO: Find a way to draw routes over the tracks!
-        SKTracksFile tracksFile = SKTracksFile.loadAtPath(App.getResourcesDirPath() + "GPXTracks/Cluj3.gpx");
-        SKTrackElement root =tracksFile.getRootTrackElement();
-
+        SKTrackElement root = mCtrl.loadGPXTracks();
         for (SKTrackElement child : root.getChildElements()) {
-            {
-//                Log.d(TAG, "Found child of type: " + typeToString(child.getType()));
-//                for (SKTracksPoint point : child.getPointsOnTrackElement()) {
-//                    Log.d(TAG, "Point: " + point.getLongitude() + ", " + point.getLatitude());
-//                }
                 drawPolyline(child);
-            }
         }
     }
 
@@ -689,59 +660,52 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
 //  ---------- User Data ---------------------
 
-    private void showEvents() {
-        BackendUtils.fetchData(this, BackendUtils.DataType.EVENTS);
+    private void loadFavorites() {
+        mCtrl.loadFavorites();
     }
 
-    private void removeEvents() {
-        for (int i = mFirstEventId; i<= mLastEventId; i++) {
-            mapView.deleteAnnotation(i);
+    private void loadEvents() {
+        mCtrl.loadEvents();
+    }
+
+    public void updateFavoriteAnnotations() {
+        clearFavorites();
+        List<Favorite> favorites = mCtrl.getFavorites();
+        for (Favorite f : favorites) {
+            SKAnnotation a = createAnnotation(f.getLocation(), AnnotationType.FAVORITE);
+            int id = a.getUniqueID();
+            mFavoriteAnnotations.add(id);
+            f.setAnnotationId(id);
+//            TODO: check if ids update
         }
     }
 
-    private void showFavorites() {
-        BackendUtils.fetchData(this, BackendUtils.DataType.FAVORITES);
-    }
-
-//    TODO: merge with removeEvents
-    private void removeFavorites() {
-        for (int i = mFirstFavoriteId; i<= mLastFavoriteId; i++) {
-            mapView.deleteAnnotation(i);
+    public void updateEventAnnotations() {
+        clearEvents();
+        List<Event> events = mCtrl.getEvents();
+        for (Event e : events) {
+            SKAnnotation a = createAnnotation(e.getLocation(), AnnotationType.EVENT);
+            int id = a.getUniqueID();
+            mEventAnnotations.add(id);
+            e.setAnnotationId(id);
         }
     }
 
-    private void refreshFavorites() {
-        removeFavorites();
-        showFavorites();
-    }
-
-    private void refreshEvents() {
-        removeEvents();
-        showEvents();
-    }
-
-    public void updateFavorites(List<GeoPoint> points) {
-        Log.d("updateFavorites", "# of points: " + points.size());
-        mFavorites = points;
-        mFirstFavoriteId = nextUniqueId;
-        for (GeoPoint point : points) {
-            createAnnotation(new SKCoordinate(point.getLongitude(), point.getLatitude()),AnnotationType.EVENT);
+    private void clearFavorites() {
+        if (mFavoriteAnnotations != null) {
+            for (int i : mFavoriteAnnotations) {
+                mapView.deleteAnnotation(i);
+            }
         }
-        mLastFavoriteId = nextUniqueId - 1;
     }
 
-//    TODO: merge updateFavorites & updateEvents
-    public void updateEvents(List<GeoPoint> points) {
-        Log.d("updateEvents", "# of points: " + points.size());
-        mFavorites = points;
-        mFirstEventId = nextUniqueId;
-        for (GeoPoint point : points) {
-            createAnnotation(new SKCoordinate(point.getLongitude(), point.getLatitude()),AnnotationType.EVENT);
+    private void clearEvents() {
+        if (mEventAnnotations != null) {
+            for (int i : mEventAnnotations) {
+                mapView.deleteAnnotation(i);
+            }
         }
-        mLastEventId = nextUniqueId - 1;
     }
-
-
 
     //   ------------ Unused (yet) interface methods --------------
 

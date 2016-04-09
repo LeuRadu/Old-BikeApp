@@ -17,6 +17,14 @@ public class Validator {
         return true;
     }
 
+    public static boolean isTextValid(Context context, String name) {
+        if (name.isEmpty()) {
+            Toast.makeText(context, "Name field cannot be empty", Toast.LENGTH_LONG);
+            return false;
+        }
+        return true;
+    }
+
     public static boolean isEmailValid(Context context, String email){
         if (email.isEmpty()) {
             Toast.makeText(context, "Email field cannot be empty", Toast.LENGTH_LONG);

@@ -23,9 +23,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".activities.RegistrationActivity" />
-        <activity android:name=".activities.LoginActivity" />
+        <activity android:name=".activities.RegistrationActivity"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".activities.LoginActivity"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"/>
         <activity android:name=".activities.MapActivity"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".activities.EventActivity"
                   android:theme="@style/Theme.AppCompat.NoActionBar"/>
 
         <service android:name="com.backendless.AndroidService" />

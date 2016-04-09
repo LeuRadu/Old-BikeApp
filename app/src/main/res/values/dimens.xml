@@ -9,6 +9,7 @@
 
     <dimen name="very_small">5dp</dimen>
     <dimen name="small">10dp</dimen>
+    <dimen name="medium">15dp</dimen>
     <dimen name="large">25dp</dimen>
     <dimen name="larger">30dp</dimen>
 </resources>
