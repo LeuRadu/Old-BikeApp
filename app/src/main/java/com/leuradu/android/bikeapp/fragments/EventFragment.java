@@ -174,7 +174,7 @@ public class EventFragment extends Fragment {
     }
 
     private void updateTime() {
-        String time = DateFormat.format("hh:mm", mDate).toString();
+        String time = DateFormat.format("HH:mm", mDate).toString();
         mButtonTime.setText(time);
     }
 

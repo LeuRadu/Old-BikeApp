@@ -21,15 +21,14 @@ import android.widget.Toast;
 
 import com.backendless.Backendless;
 import com.backendless.BackendlessUser;
-import com.backendless.geo.GeoPoint;
 import com.leuradu.android.bikeapp.App;
 import com.leuradu.android.bikeapp.R;
 import com.leuradu.android.bikeapp.controller.Controller;
+import com.leuradu.android.bikeapp.dialogs.EventInfoFragment;
 import com.leuradu.android.bikeapp.dialogs.FavoriteFragment;
 import com.leuradu.android.bikeapp.model.CustomMenuItem;
 import com.leuradu.android.bikeapp.model.Event;
 import com.leuradu.android.bikeapp.model.Favorite;
-import com.leuradu.android.bikeapp.repository.BackendManager;
 import com.leuradu.android.bikeapp.utils.MenuListAdapter;
 import com.skobbler.ngx.SKCoordinate;
 import com.skobbler.ngx.map.SKAnimationSettings;
@@ -54,6 +53,7 @@ import com.skobbler.ngx.tracks.SKTrackElement;
 import com.skobbler.ngx.tracks.SKTracksPoint;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -120,6 +120,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
 
     private List<Integer> mFavoriteAnnotations;
     private List<Integer> mEventAnnotations;
+    private HashMap<Integer, AnnotationType> mAnnotationTypes;
 
 //  --Others
     private SKAnnotation mMarkerAnnotation;
@@ -144,10 +145,9 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mapFragment.initialise();
         mapFragment.setMapSurfaceListener(this);
 
-//        TESTING FEATURES:
         mCtrl = new Controller(this);
-//          TODO: remove auto login
-        Backendless.UserService.login("radu@yahoo.com", "pass", null);
+        //        TESTING FEATURES:
+
 //        c.initMapGraph();
     }
 
@@ -248,7 +248,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, header, "YOUR ACCOUNT"));
         if (mUserLoggedIn) {
             mLeftMenu.add(new CustomMenuItem(MenuAction.NOACTION, info,
-                    "Welcome, " + Backendless.UserService.CurrentUser().getProperty("name")));
+                    "Welcome, " + mCtrl.getCurrentUsername()));
             mLeftMenu.add(new CustomMenuItem(MenuAction.SHOW_FAVORITES, checkbox, "Show favorites"));
             mLeftMenu.add(new CustomMenuItem(MenuAction.LOGOUT, item, "Log out"));
         } else {
@@ -280,6 +280,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     private void initVariables() {
         mFavoriteAnnotations = new ArrayList<>();
         mEventAnnotations = new ArrayList<>();
+        mAnnotationTypes = new HashMap<>();
         mBikeLanesShown = false;
         mFavoritesShown = false;
         mUserLoggedIn = false;
@@ -360,6 +361,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
             case SAVE_TO_FAVORITES:
                 closeDrawers();
                 point = mSelectedAnnotation.getLocation();
+//                TODO: create some method for summoning dialogs
                 FragmentManager fm = getSupportFragmentManager();
                 FavoriteFragment fragment = FavoriteFragment.newInstance(point,mCtrl);
                 fragment.show(fm, DIALOG_FAVORITES);
@@ -453,6 +455,7 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 break;
         }
         mapView.addAnnotation(a, SKAnimationSettings.ANIMATION_NONE);
+        mAnnotationTypes.put(a.getUniqueID(), type);
         return a;
     }
 
@@ -512,13 +515,13 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
         mStartAnnotation = null;
         mEndAnnotation = null;
     }
-    //    TODO: different Popup for different annotation type
-    //    TODO: show info depending on annotation
+
     private void showPopup(SKAnnotation a) {
+        AnnotationType type = mAnnotationTypes.get(a.getUniqueID());
         SKCalloutView view = mapViewHolder.getCalloutView();
         view.setVisibility(View.VISIBLE);
-        view.setViewColor(getResources().getColor(R.color.gray));
-        view.setLeftImage(getResources().getDrawable(R.drawable.courage));
+        view.setViewColor(getResources().getColor(R.color.dark_gray_transparent));
+//        view.setLeftImage(getResources().getDrawable(R.drawable.courage));
         view.setVerticalOffset(30f);
         view.setOnRightImageClickListener(new View.OnClickListener() {
             @Override
@@ -526,6 +529,40 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
                 mDrawerLayout.openDrawer(mListViewRight);
             }
         });
+        switch (type) {
+            case FAVORITE:
+                Favorite f = mCtrl.getFavorite(a.getUniqueID());
+                view.setTitle(f.getName());
+                view.setDescription(f.getDescription());
+                break;
+            case EVENT:
+                Event e = mCtrl.getEvent(a.getUniqueID());
+                view.setTitle(e.getName());
+//                TODO: get user name, not email
+                view.setDescription("Added by " + e.getUserId());
+                view.setLeftImage(getResources().getDrawable(R.drawable.courage));
+                final int annotationId = a.getUniqueID();
+                Log.d("Show Popup", e.getDate().toString());
+                view.setOnLeftImageClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        FragmentManager fm = getSupportFragmentManager();
+                        EventInfoFragment fragment = EventInfoFragment.newInstance(mCtrl,annotationId);
+                        fragment.show(fm, DIALOG_FAVORITES);
+                    }
+                });
+                break;
+            case START:
+            case END:
+            case NEW:
+                view.setTitle("New location");
+                view.setDescription("See options on the right");
+                view.setLeftImage(null);
+//                TODO: reverse geocoding for street name
+                break;
+        }
+//        TODO: still need this?
+        view.redraw();
         view.showAtLocation(a.getLocation(), true);
     }
 
@@ -598,6 +635,8 @@ public class MapActivity extends AppCompatActivity implements SKMapSurfaceListen
     public void closeRouting() {
         SKRouteManager.getInstance().clearCurrentRoute();
         findViewById(R.id.layout_routing).setVisibility(View.GONE);
+        mCtrl.setRoutingStart(null);
+        mCtrl.setRoutingEnd(null);
     }
 
     @Override

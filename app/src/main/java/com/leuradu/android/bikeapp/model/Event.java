@@ -19,7 +19,7 @@ public class Event {
     private int annotationId;
     private String backendId;
     private SKCoordinate location;
-    private String user;
+    private String userId;
     private String name;
     private String description;
     private Date date;
@@ -29,7 +29,7 @@ public class Event {
         location = new SKCoordinate(point.getLongitude(), point.getLatitude());
         name = point.getMetadata("Name");
         description = point.getMetadata("Description");
-        user = point.getMetadata("User");
+        userId = point.getMetadata("User");
         String d = point.getMetadata("Datetime");
         date = parseDateString(d);
     }
@@ -38,7 +38,7 @@ public class Event {
                  String date) {
         this.backendId = id;
         this.location = location;
-        this.user = user;
+        this.userId = user;
         this.name = name;
         this.description = description;
         this.date = parseDateString(date);
@@ -47,7 +47,7 @@ public class Event {
     private Date parseDateString(String date) {
         Date result = null;
         try {
-            DateFormat df = new SimpleDateFormat("EEE MMM dd kk:mm:ss zzz yyyy", Locale.ENGLISH);
+            DateFormat df = new SimpleDateFormat("EEE MMM dd hh:mm:ss yyyy", Locale.ENGLISH);
             result = df.parse(date);
             Log.d("EVENT", result.toString());
         } catch (ParseException pe) {
@@ -80,12 +80,12 @@ public class Event {
         this.location = location;
     }
 
-    public String getUser() {
-        return user;
+    public String getUserId() {
+        return userId;
     }
 
-    public void setUser(String user) {
-        this.user = user;
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public String getName() {

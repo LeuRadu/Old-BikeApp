@@ -105,10 +105,22 @@ public class Controller {
         bm.saveEvent(lon, lat, name, descr, date);
     }
 
+    public String getCurrentUsername() {
+        return bm.getCurrentUsername();
+    }
+
 //  -------- Local repository functionality:
 
     public List<Favorite> getFavorites() {
         return rep.getFavorites();
+    }
+
+    public Favorite getFavorite(int id) {
+        return rep.getFavorite(id);
+    }
+
+    public Event getEvent(int id) {
+        return rep.getEvent(id);
     }
 
     public void setFavorites(List<Favorite> favorites) {

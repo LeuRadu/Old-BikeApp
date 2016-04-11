@@ -24,7 +24,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="@dimen/small_text"
-            android:text="@string/email"/>
+            android:text="@string/name"/>
 
         <EditText
             android:id="@+id/login_text_email"

@@ -52,7 +52,7 @@ public class LoginFragment extends Fragment {
     }
 
     private void setDataForTesting() {
-        mTextEmail.setText("radu@yahoo.com");
+        mTextEmail.setText("Radu");
         mTextPassword.setText("pass");
     }
 

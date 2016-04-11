@@ -1,5 +1,7 @@
 package com.leuradu.android.bikeapp.repository;
 
+import android.util.Log;
+
 import com.leuradu.android.bikeapp.model.Event;
 import com.leuradu.android.bikeapp.model.Favorite;
 
@@ -67,5 +69,25 @@ public class LocalRepository {
 
     public void clearEvents() {
         mEvents = new ArrayList<>();
+    }
+
+    public Favorite getFavorite(int id) {
+        for (Favorite f : mFavorites) {
+            Log.d("getFavorite", f.getAnnotationId() + ", " + f.getName());
+            if (f.getAnnotationId() == id) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    public Event getEvent(int id) {
+        for (Event e : mEvents) {
+            Log.d("getEvent", e.getAnnotationId() + ", " + e.getName());
+            if (e.getAnnotationId() == id) {
+                return e;
+            }
+        }
+        return null;
     }
 }
